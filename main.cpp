@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
 
+//define shellcode buffer, see Unhook.asm for uncompiled
 unsigned char buf[] = {
   0x55, 0x89, 0xe5, 0x83, 0xec, 0x1c, 0x31, 0xc0, 0x89, 0x45, 0xfc, 0x89,
   0x45, 0xf8, 0x89, 0x45, 0xf4, 0x89, 0x45, 0xf0, 0x89, 0x45, 0xec, 0x89,
@@ -43,14 +44,16 @@ unsigned char buf[] = {
 };
 
 int getPID() {
-
+       
     LPCTSTR lockWinowName = L"Respondus Lockdown Browser";
 
+    //get handle to lockdown browser window
     HWND hwnd = FindWindowW(NULL, lockWinowName);
     if (hwnd == NULL) {
         return 0;
     }
 
+    //use window handle to get pid
     DWORD pid;
     if (!GetWindowThreadProcessId(hwnd, &pid)) {
         return 0;
@@ -67,6 +70,7 @@ int main() {
     DWORD miliseconds = 20000;
     Sleep(miliseconds);
 
+    //call getPID function and loop until pid is returned
     while ((pid = getPID()) == 0) {
         printf("failed to find open lockdown browser process. trying again in 20 seconds...\n");
         Sleep(20000);
@@ -74,22 +78,25 @@ int main() {
 
     printf("found process, PID : % ld\n", pid);
 
+    //open handle to lockdown browser
     HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
 
+    //allocate memory inside lockdown browser for shellcode
     LPVOID remoteMemory = VirtualAllocEx(hProcess, NULL, sizeof(buf), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 
+    //write shellcode to allocated region
     WriteProcessMemory(hProcess, remoteMemory, buf, sizeof(buf), NULL);
 
     printf("memory allocated and written to at: 0x%p\nattempting execution...", remoteMemory);
     Sleep(10000);
 
+    //execute injected shellcode
     HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)remoteMemory, NULL, 0, NULL);
 
     printf("executed exploit! Enjoy your unlocked computer :)\nClosing in 5 seconds...");
     Sleep(5000);
 
-    //WaitForSingleObject(hThread, INFINITE);
-
+    //close handles and cleanup
     CloseHandle(hThread);
     CloseHandle(hProcess);
 
